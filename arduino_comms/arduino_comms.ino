@@ -23,17 +23,20 @@ SoftwareSerial sweep_str(SWP_TX, SWP_RX);
 
 Sweep sweep_dev(sweep_str);
 
-/* constants */
-const float WHEEL_RAD = 0.6;
-const int THERM_CNT = 8;
+/* global constants */
+const float WHEEL_RAD = 0.6;  // wheel radius in meters
+const int THERM_CNT = 8;      // total number of thermistors
+const int THERM_FREQ = 1000;  // frequency at which to send temperature data
 
 /* global variables */
-unsigned long prev_turn;
-float curr_vel;
-bool vel_updated = true;
+unsigned long prev_turn;      // time of previous rotation
+float curr_vel;               // current velocity of the bicycle
+bool vel_updated = true;      // boolean for whether or not to send updated velocity data
 
-char curr_cmd[16];
-int curr_ind;
+char curr_cmd[16];            // most recently received command via Bluetooth
+int curr_ind;                 // current index within the command
+
+int therm_timer;              // timer variable for sending temperature data
 
 /**
  * setup: initializes Arduino settings upon reset
@@ -66,7 +69,7 @@ void bluetooth_rcv() {
   char c;
   
   /* receive bluetooth data */
-  while (bluetooth.available()) {
+  if (bluetooth.available()) {
     c = (char)bluetooth.read();
     switch (c) {
       case '%':   
@@ -98,11 +101,13 @@ void bluetooth_snd() {
     vel_updated = false;
   }
 
-  /* send temperature data */
-  // TODO: make this send at lower frequency 
-  for (i = 0; i < THERM_CNT; i++) {
-    bluetooth.print("%TH"); bluetooth.print((i+1)); bluetooth.print(": ");
-    bluetooth.println(get_battery_temp(i));
+  /* send temperature data once every THERM_FREQ loops */
+  if ((therm_timer++) % THERM_FREQ == 0) {
+    for (i = 0; i < THERM_CNT; i++) {
+      bluetooth.print("%TH"); bluetooth.print((i+1)); bluetooth.print(": ");
+      bluetooth.println(get_battery_temp(i));
+    }
+    therm_timer = 0;
   }
 }
 
@@ -146,6 +151,7 @@ void reset() {
   // reset velocity calculation variables
   prev_turn = millis();
   curr_vel = 0;
+  therm_timer = 0;
 
   // reset Bluetooth commands
   curr_cmd[0] = '\0';
